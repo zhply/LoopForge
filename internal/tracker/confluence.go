@@ -17,8 +17,11 @@ import (
 )
 
 // confluenceClient publishes product docs to a Confluence Server/Data Center
-// instance (REST v1) using the same credentials model as the Jira client:
-// Basic (email + API token) or Bearer (PAT) when the email is empty.
+// instance (REST v1; the API paths live directly under /rest/api, no /wiki
+// prefix) using the same credentials model as the Jira client: Basic auth
+// where the account accepts a legacy Server/Data Center username + password
+// or a Cloud email + API token. Bearer (PAT) is used only when the account is
+// empty, which legacy Confluence Server does not support.
 type confluenceClient struct {
 	base, email, token string
 	http               *http.Client
@@ -28,7 +31,7 @@ func (s *Service) confluenceClient() (*confluenceClient, error) {
 	cfg := s.cfg.Get()
 	base := strings.TrimRight(strings.TrimSpace(cfg.ConfluenceBaseURL), "/")
 	if base == "" || strings.TrimSpace(cfg.ConfluenceToken) == "" {
-		return nil, fmt.Errorf("请先在同步设置中配置 Confluence 地址与 API Token")
+		return nil, fmt.Errorf("请先在同步设置中配置 Confluence 地址与账号、密码（或 API Token）")
 	}
 	return &confluenceClient{base: base, email: strings.TrimSpace(cfg.ConfluenceEmail), token: strings.TrimSpace(cfg.ConfluenceToken), http: &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
@@ -63,7 +66,7 @@ func (k *confluenceClient) request(method, path string, query url.Values, input,
 	}
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return fmt.Errorf("Confluence returned HTTP %d; check the Confluence token and space permissions", res.StatusCode)
+		return fmt.Errorf("Confluence returned HTTP %d; check the Confluence account, password/token and space permissions", res.StatusCode)
 	}
 	if output == nil {
 		_, err = io.Copy(io.Discard, io.LimitReader(res.Body, 4<<20))

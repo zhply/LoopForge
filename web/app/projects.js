@@ -186,9 +186,9 @@ function projectIntegrationPanel(d,saved){
       ${paRow('合并后自动回写','MR 合并后向 Jira 工作项发一条交付评论并流转到已完成。',`<label class="pa-switch-wrap"><input type="checkbox" name="paJiraWriteBack" role="switch" ${sc.jiraWriteBackEnabled?'checked':''} aria-label="MR 合并后自动回写 Jira"><span class="pa-switch"></span></label>`,{attrs:' data-pa-row-inline'})}
     </div>`);
   const confluence=paSection('Confluence','把需求空间的方案文档发布为 Confluence 页面，并在需求上留痕。',`<div class="pa-rows">
-      ${paRow('Confluence 地址','例如 https://confluence.example.com（平台级）。',`<input class="pa-input mono" name="paConfluenceUrl" value="${escapeHTML(sc.confluenceBaseUrl||'')}" placeholder="https://confluence.example.com" spellcheck="false">`)}
-      ${paRow('邮箱','Confluence 账号邮箱，用于 Basic 认证。',`<input class="pa-input" name="paConfluenceEmail" value="${escapeHTML(sc.confluenceEmail||'')}" placeholder="user@example.com">`)}
-      ${paRow('API Token',sc.confluenceTokenConfigured?'已保存；留空保持不变。':'Confluence API Token 或个人访问令牌。',secretInput('paConfluenceToken','confluenceTokenConfigured','粘贴 Token'))}
+      ${paRow('Confluence 地址','例如 https://confluence.example.com（Server 直接填根地址，无需 /wiki 后缀；平台级）。',`<input class="pa-input mono" name="paConfluenceUrl" value="${escapeHTML(sc.confluenceBaseUrl||'')}" placeholder="https://confluence.example.com" spellcheck="false">`)}
+      ${paRow('账号','Confluence Server（老版本）填登录用户名；Confluence Cloud 填邮箱。',`<input class="pa-input" name="paConfluenceEmail" value="${escapeHTML(sc.confluenceEmail||'')}" placeholder="用户名或 user@example.com">`)}
+      ${paRow('密码 / API Token',sc.confluenceTokenConfigured?'已保存；留空保持不变。':'Confluence Server 填登录密码（老版本不支持 PAT）；Confluence Cloud 填 API Token。',secretInput('paConfluenceToken','confluenceTokenConfigured','粘贴密码或 Token'))}
       ${paRow('Space Key','方案页面默认发布的 Confluence 空间。',`<input class="pa-input mono" name="paConfluenceSpace" value="${escapeHTML(sc.confluenceSpaceKey||'')}" placeholder="PROJ" spellcheck="false">`)}
     </div>`);
   const webhook=paSection('GitLab 与 Webhook','仓库在「代码仓库」页粘贴 GitLab 地址即可识别；合并请求与 Jira 变更可回调即时刷新。',`<div class="pa-rows">

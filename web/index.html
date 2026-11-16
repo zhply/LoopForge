@@ -1064,8 +1064,8 @@
           <div><label>Jira 密码 / API Token（平台，Server 8.x 填密码，留空保留已保存值）</label><input id="syncJiraToken" class="input" type="password" autocomplete="new-password"></div>
           <div><label>本项目 Jira Project Key</label><input id="syncJiraProjectKey" class="input" placeholder="PROJ"></div>
           <div><label>Confluence 地址（平台）</label><input id="syncConfluenceURL" class="input" placeholder="https://confluence.example.com"></div>
-          <div><label>Confluence 邮箱（平台）</label><input id="syncConfluenceEmail" class="input" placeholder="user@example.com"></div>
-          <div><label>Confluence API Token（平台，留空保留已保存值）</label><input id="syncConfluenceToken" class="input" type="password" autocomplete="new-password"></div>
+          <div><label>Confluence 账号（平台，Server 填用户名 / Cloud 填邮箱）</label><input id="syncConfluenceEmail" class="input" placeholder="用户名或 user@example.com"></div>
+          <div><label>Confluence 密码 / API Token（平台，Server 老版本填密码，留空保留已保存值）</label><input id="syncConfluenceToken" class="input" type="password" autocomplete="new-password"></div>
           <div><label>Confluence Space Key（平台默认）</label><input id="syncConfluenceSpaceKey" class="input" placeholder="PROJ"></div>
           <div><label>Webhook Secret（平台，留空保留已保存值）</label><input id="syncWebhookSecret" class="input" type="password" autocomplete="new-password"></div>
           <div class="muted" style="font-size:12px">在 GitLab / Jira 中配置回调：<b>POST 本站地址 + /api/webhooks/gitlab</b>（secret 填入 GitLab Token，即 X-Gitlab-Token 头）与 <b>/api/webhooks/jira</b>（自定义请求头 X-Webhook-Secret）。MR 合并、Jira 变更将即时生效，无需等待轮询。</div>

@@ -11,6 +11,36 @@ import (
 	"agentflow/internal/domain"
 )
 
+// Legacy Confluence Server/Data Center (no PAT) signs in with username +
+// password; a non-email account must ride the same Basic header as Cloud
+// email + API token.
+func TestPublishConfluencePageServerUsernameBasicAuth(t *testing.T) {
+	var mu sync.Mutex
+	var sawAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		sawAuth = r.Header.Get("Authorization")
+		mu.Unlock()
+		if r.Method == http.MethodPost && r.URL.Path == "/rest/api/content" {
+			_, _ = w.Write([]byte(`{"id":"300","title":"Fresh plan"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"results":[]}`))
+	}))
+	t.Cleanup(server.Close)
+	svc := NewService()
+	svc.Configure(domain.SyncConfig{ConfluenceBaseURL: server.URL, ConfluenceEmail: "ops-user", ConfluenceToken: "p@ssw0rd"})
+	if _, _, err := svc.PublishConfluencePage("", "PROJ", "Fresh plan", "# plan"); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	auth := sawAuth
+	mu.Unlock()
+	if want := "Basic " + basicAuth("ops-user:p@ssw0rd"); auth != want {
+		t.Fatalf("server basic auth = %q; want %q", auth, want)
+	}
+}
+
 // recordedConfluenceCall is one captured REST call from the handler goroutine.
 type recordedConfluenceCall struct {
 	Method string

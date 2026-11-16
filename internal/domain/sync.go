@@ -38,7 +38,10 @@ type SyncConfig struct {
 	// Confluence product-doc publishing (P2). Pages live under one platform
 	// space key unless a request overrides it; per-issue page refs live on
 	// Issue (ConfluencePageID/URL).
-	ConfluenceBaseURL         string `json:"confluenceBaseUrl,omitempty"`
+	ConfluenceBaseURL string `json:"confluenceBaseUrl,omitempty"`
+	// ConfluenceEmail holds the sign-in account: a legacy Confluence
+	// Server/Data Center username (signs in with username + password, no PAT
+	// support) or a Cloud email. The legacy json key stays for stored configs.
 	ConfluenceEmail           string `json:"confluenceEmail,omitempty"`
 	ConfluenceToken           string `json:"confluenceToken,omitempty"`
 	ConfluenceSpaceKey        string `json:"confluenceSpaceKey,omitempty"`
