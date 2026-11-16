@@ -85,6 +85,32 @@ func TestImportJiraIssue(t *testing.T) {
 	}
 }
 
+// Jira Server 8.13.9 has no PAT support and signs in with username + password;
+// a non-email account must ride the same Basic header as Cloud email + token.
+func TestImportJiraIssueServerUsernameBasicAuth(t *testing.T) {
+	var mu sync.Mutex
+	var sawAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		sawAuth = r.Header.Get("Authorization")
+		mu.Unlock()
+		_, _ = w.Write([]byte(jiraIssueJSON("PROJ-123", "Fix login flow", "In Progress", "indeterminate")))
+	}))
+	t.Cleanup(server.Close)
+	svc := NewService()
+	svc.Configure(domain.SyncConfig{JiraBaseURL: server.URL, JiraEmail: "ops-user", JiraToken: "p@ssw0rd"})
+	store := &memIssueStore{projects: map[string]domain.Project{"p1": {ID: "p1", JiraProjectKey: "PROJ"}}}
+	if _, err := svc.ImportJiraIssue(store, "p1", "PROJ-123"); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	auth := sawAuth
+	mu.Unlock()
+	if want := "Basic " + basicAuth("ops-user:p@ssw0rd"); auth != want {
+		t.Fatalf("server basic auth = %q; want %q", auth, want)
+	}
+}
+
 func TestImportJiraIssueClosedStartsClosed(t *testing.T) {
 	svc, _ := newJiraTestService(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(jiraIssueJSON("PROJ-7", "Done item", "Done", "done")))

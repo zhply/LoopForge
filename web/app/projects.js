@@ -180,8 +180,8 @@ function projectIntegrationPanel(d,saved){
   const secretInput=(name,field,placeholder)=>`<input class="pa-input" type="password" name="${name}" value="" autocomplete="new-password" placeholder="${sc[field]?'已保存，留空保持不变':placeholder}">`;
   const jira=paSection('Jira','导入本项目需求；MR 合并后可自动评论并流转关闭。',`<div class="pa-rows">
       ${paRow('Jira 地址','例如 https://jira.example.com（平台级）。',`<input class="pa-input mono" name="paJiraUrl" value="${escapeHTML(sc.jiraBaseUrl||'')}" placeholder="https://jira.example.com" spellcheck="false">`)}
-      ${paRow('邮箱','Jira 账号邮箱，用于 Basic 认证。',`<input class="pa-input" name="paJiraEmail" value="${escapeHTML(sc.jiraEmail||'')}" placeholder="user@example.com">`)}
-      ${paRow('API Token',sc.jiraTokenConfigured?'已保存；留空保持不变。':'Jira API Token 或个人访问令牌。',secretInput('paJiraToken','jiraTokenConfigured','粘贴 Token'))}
+      ${paRow('账号','Jira Server（如 8.13.9）填登录用户名；Jira Cloud 填邮箱。',`<input class="pa-input" name="paJiraEmail" value="${escapeHTML(sc.jiraEmail||'')}" placeholder="用户名或 user@example.com">`)}
+      ${paRow('密码 / API Token',sc.jiraTokenConfigured?'已保存；留空保持不变。':'Jira Server 填登录密码（老版本不支持 PAT）；Jira Cloud 填 API Token。',secretInput('paJiraToken','jiraTokenConfigured','粘贴密码或 Token'))}
       ${paRow('项目 Key','本项目对应的 Jira 项目 Key，导入需求时使用。',`<input class="pa-input mono" name="paJiraKey" value="${escapeHTML(jiraKey)}" placeholder="PROJ" spellcheck="false">`)}
       ${paRow('合并后自动回写','MR 合并后向 Jira 工作项发一条交付评论并流转到已完成。',`<label class="pa-switch-wrap"><input type="checkbox" name="paJiraWriteBack" role="switch" ${sc.jiraWriteBackEnabled?'checked':''} aria-label="MR 合并后自动回写 Jira"><span class="pa-switch"></span></label>`,{attrs:' data-pa-row-inline'})}
     </div>`);

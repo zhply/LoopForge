@@ -19,9 +19,12 @@ type SyncConfig struct {
 	// Jira read-only import (P1). Token is a Jira API token or PAT stored
 	// alongside the other sync credentials; per-project keys live on Project.
 	JiraBaseURL string `json:"jiraBaseUrl,omitempty"`
-	JiraEmail   string `json:"jiraEmail,omitempty"`
-	JiraToken   string `json:"jiraToken,omitempty"`
-	JiraJQL     string `json:"jiraJql,omitempty"`
+	// JiraEmail holds the sign-in account: a Jira Server/Data Center username
+	// (legacy 8.x signs in with username + password) or a Cloud email. The
+	// legacy json key stays for stored configs.
+	JiraEmail string `json:"jiraEmail,omitempty"`
+	JiraToken string `json:"jiraToken,omitempty"`
+	JiraJQL   string `json:"jiraJql,omitempty"`
 	// JiraWriteBackEnabled turns on the MR→Jira delivery write-back (P3):
 	// when a synced Jira work item's merge requests reach the default branch,
 	// the platform posts one delivery comment and moves the issue to a done

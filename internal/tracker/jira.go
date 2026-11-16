@@ -18,7 +18,10 @@ import (
 
 // jiraClient is a read-only Jira REST v2 client. P1 only imports: issues are
 // pulled per project (Project.JiraProjectKey) and status changes never write
-// back. Auth is Basic (email + API token) or Bearer (PAT) when email is empty.
+// back. Auth is Basic; the account field accepts a Jira Server/Data Center
+// username (e.g. 8.13.9, which has no PAT support and signs in with
+// username+password) or a Jira Cloud email + API token. Bearer (PAT) is used
+// only when the account is empty, which legacy Jira Server does not support.
 type jiraClient struct {
 	base, email, token string
 	http               *http.Client
@@ -28,7 +31,7 @@ func (s *Service) jiraClient() (*jiraClient, error) {
 	cfg := s.cfg.Get()
 	base := strings.TrimRight(strings.TrimSpace(cfg.JiraBaseURL), "/")
 	if base == "" || strings.TrimSpace(cfg.JiraToken) == "" {
-		return nil, fmt.Errorf("请先在同步设置中配置 Jira 地址与 API Token")
+		return nil, fmt.Errorf("请先在同步设置中配置 Jira 地址与账号、密码（或 API Token）")
 	}
 	return &jiraClient{base: base, email: strings.TrimSpace(cfg.JiraEmail), token: strings.TrimSpace(cfg.JiraToken), http: &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
@@ -63,7 +66,7 @@ func (j *jiraClient) request(method, path string, query url.Values, input, outpu
 	}
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return fmt.Errorf("Jira returned HTTP %d; check the Jira token and permissions", res.StatusCode)
+		return fmt.Errorf("Jira returned HTTP %d; check the Jira account, password/token and permissions", res.StatusCode)
 	}
 	if output == nil {
 		_, err = io.Copy(io.Discard, io.LimitReader(res.Body, 4<<20))
