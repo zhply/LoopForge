@@ -997,6 +997,19 @@ const http = parseGongfengRepoURL('http://git.example.com/example/agent-flow.git
 assert.equal(http.project, 'example/agent-flow');
 assert.equal(http.name, 'agent-flow');
 assert.equal(ssh.name, 'agent-flow');
+// Self-hosted GitLab: any host becomes gitlab:<host>/<path> so the GitLab
+// client (not the Gongfeng one) takes over.
+const gl = parseGongfengRepoURL('https://gitlab.company.com/group/app');
+assert.equal(gl.project, 'gitlab:gitlab.company.com/group/app');
+assert.equal(gl.provider, 'gitlab');
+assert.equal(gl.cloneUrl, 'https://gitlab.company.com/group/app.git');
+assert.equal(gl.name, 'app');
+const glTree = parseGongfengRepoURL('https://gitlab.company.com/group/app/-/tree/main');
+assert.equal(glTree.project, 'gitlab:gitlab.company.com/group/app');
+const glNested = parseGongfengRepoURL('git@gitlab.company.com:group/sub/app.git');
+assert.equal(glNested.project, 'gitlab:gitlab.company.com/group/sub/app');
+assert.equal(glNested.cloneUrl, 'git@gitlab.company.com:group/sub/app.git');
+assert.equal(parseGongfengRepoURL('https://bitbucket.org/foo/bar'), null, 'non-GitLab public hosts stay rejected');
 const html = require('node:fs').readFileSync('index.html', 'utf8');
 assert.ok(html.includes('集成分支用于检查多个 SOP 执行后工作分支之间是否存在合并冲突'));
 assert.ok(/<input[^>]*name="integrateBranch"[^>]*>/.test(html));

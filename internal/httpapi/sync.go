@@ -16,7 +16,7 @@ type syncHandlers struct {
 
 func (h *syncHandlers) syncConfig(c *gin.Context) {
 	if c.Request.Method == http.MethodGet {
-		c.JSON(200, h.repo.SyncConfig())
+		c.JSON(200, domain.PublicSyncConfig(h.repo.SyncConfig()))
 		return
 	}
 	if c.Request.Method == http.MethodPut || c.Request.Method == http.MethodPost {
@@ -32,6 +32,17 @@ func (h *syncHandlers) syncConfig(c *gin.Context) {
 		cfg.LastSyncStatus = current.LastSyncStatus
 		cfg.LastSyncError = current.LastSyncError
 		cfg.PlaybookSeedRev = current.PlaybookSeedRev
+		// The Jira token is write-only over the API: an empty submission keeps
+		// the stored token so partial saves never wipe credentials.
+		if strings.TrimSpace(cfg.JiraToken) == "" {
+			cfg.JiraToken = current.JiraToken
+		}
+		if strings.TrimSpace(cfg.ConfluenceToken) == "" {
+			cfg.ConfluenceToken = current.ConfluenceToken
+		}
+		if strings.TrimSpace(cfg.WebhookSecret) == "" {
+			cfg.WebhookSecret = current.WebhookSecret
+		}
 		// TAPD workspace/iteration live on projects; sync_config keeps platform MCP + auto-sync only.
 		cfg.TAPDWorkspaceID = ""
 		cfg.TAPDIterationID = ""
@@ -41,7 +52,7 @@ func (h *syncHandlers) syncConfig(c *gin.Context) {
 			respond(c, err)
 			return
 		}
-		c.JSON(200, h.repo.SyncConfig())
+		c.JSON(200, domain.PublicSyncConfig(h.repo.SyncConfig()))
 		return
 	}
 }
@@ -63,7 +74,7 @@ func (h *syncHandlers) syncLogs(c *gin.Context) {
 }
 
 func (h *syncHandlers) syncStatus(c *gin.Context) {
-	c.JSON(200, map[string]any{"syncing": h.sync.IsSyncing(), "config": h.repo.SyncConfig(), "logs": h.sync.Logs()})
+	c.JSON(200, map[string]any{"syncing": h.sync.IsSyncing(), "config": domain.PublicSyncConfig(h.repo.SyncConfig()), "logs": h.sync.Logs()})
 }
 
 func (h *syncHandlers) syncCreate(c *gin.Context) {

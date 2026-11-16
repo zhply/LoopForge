@@ -125,6 +125,7 @@ func (h *projectsHandlers) projects(c *gin.Context) {
 		}
 		v.TAPDWorkspaceID = strings.TrimSpace(v.TAPDWorkspaceID)
 		v.TAPDIterationID = strings.TrimSpace(v.TAPDIterationID)
+		v.JiraProjectKey = strings.TrimSpace(v.JiraProjectKey)
 		if existing, ok := h.repo.Project(v.ID); ok {
 			if body.TAPDClear {
 				v.TAPDWorkspaceID = ""
@@ -136,6 +137,9 @@ func (h *projectsHandlers) projects(c *gin.Context) {
 				if v.TAPDIterationID == "" {
 					v.TAPDIterationID = existing.TAPDIterationID
 				}
+			}
+			if v.JiraProjectKey == "" {
+				v.JiraProjectKey = existing.JiraProjectKey
 			}
 		} else {
 			if body.TAPDClear {

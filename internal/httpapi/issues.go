@@ -111,6 +111,73 @@ func (h issuesHandlers) importTAPD(c *gin.Context) {
 	c.JSON(http.StatusOK, stored)
 }
 
+// importJira imports one Jira issue (read-only) by pasted browse URL or bare
+// issue key into a project. Repository binding stays optional: Jira issues do
+// not carry repo context.
+func (h issuesHandlers) importJira(c *gin.Context) {
+	var req struct {
+		ProjectID          string            `json:"projectId"`
+		URL                string            `json:"url"`
+		WorkflowID         string            `json:"workflowId"`
+		RepositoryIDs      []string          `json:"repositoryIds"`
+		BaseBranch         *string           `json:"baseBranch"`
+		RepositoryBranches map[string]string `json:"repositoryBranches"`
+	}
+	if !decode(c, &req) {
+		return
+	}
+	if strings.TrimSpace(req.ProjectID) == "" || strings.TrimSpace(req.URL) == "" {
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "projectId and url are required"})
+		return
+	}
+	if _, err := tracker.ParseJiraIssueRef(req.URL); err != nil {
+		c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if _, ok := h.repo.Project(req.ProjectID); !ok {
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "project not found"})
+		return
+	}
+	if h.sync == nil {
+		c.JSON(http.StatusBadRequest, map[string]string{"error": "Jira 同步未配置"})
+		return
+	}
+	h.configureSync(h.repo.SyncConfig())
+	issue, err := h.sync.ImportJiraIssue(h.repo, req.ProjectID, req.URL)
+	if err != nil {
+		respond(c, err)
+		return
+	}
+	if err := h.assignIssueWorkflow(&issue, req.WorkflowID); err != nil {
+		c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	h.bindRequirementPlaybook(&issue)
+	if ids := tapdImportRepositoryIDs("", req.RepositoryIDs); len(ids) > 0 {
+		issue.RepositoryIDs = ids
+		issue.RepositoryID = ids[0]
+		probe := domain.Issue{ProjectID: req.ProjectID, RepositoryIDs: ids, RepositoryID: ids[0], RepositoryBranches: req.RepositoryBranches}
+		if req.BaseBranch != nil {
+			probe.BaseBranch = *req.BaseBranch
+		}
+		if err := h.bindIssueRepositories(&probe); err != nil {
+			c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		h.applyTAPDImportRepositories(&issue, issue, probe, req.BaseBranch != nil || req.RepositoryBranches != nil)
+		if err := h.bindIssueRepositories(&issue); err != nil {
+			c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+	if err := h.repo.PutIssue(issue); err != nil {
+		respond(c, err)
+		return
+	}
+	stored, _ := h.repo.Issue(issue.ID)
+	c.JSON(http.StatusOK, stored)
+}
+
 // tapdImportRepositoryIDs trims and deduplicates the requested repositories,
 // keeping their order. The legacy single repository goes first when it is not
 // already listed.
@@ -448,6 +515,7 @@ var issueRoutes = map[string]issueRoute{
 	"/api/issues/:id/reopen":              {handle: issuesHandlers.reopenIssue, methods: []string{http.MethodPost}},
 	"/api/issues/:id/close":               {handle: issuesHandlers.closeIssue, methods: []string{http.MethodPost}},
 	"/api/issues/:id/resync-tapd":         {handle: issuesHandlers.resyncTAPDIssue, methods: []string{http.MethodPost}},
+	"/api/issues/:id/publish-confluence":  {handle: issuesHandlers.publishConfluence, methods: []string{http.MethodPost}},
 	"/api/issues/:id/requirement":         {handle: issuesHandlers.issueRequirement, methods: []string{http.MethodGet}},
 	"/api/issues/:id/sops":                {handle: issuesHandlers.issueSOPs, methods: []string{http.MethodGet, http.MethodPut}},
 	"/api/issues/:id/dispatch":            {handle: issuesHandlers.dispatchIssueRoute, methods: []string{http.MethodPost}},

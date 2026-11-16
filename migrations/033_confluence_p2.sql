@@ -1,0 +1,13 @@
+-- Idempotent MySQL migration: P2 "Confluence product-doc publishing".
+--
+-- No DDL is required. The new fields live inside existing JSON payloads and
+-- are read with zero-value defaults by code, so old rows keep working:
+--
+--   sync_config.payload -> "confluenceBaseUrl" / "confluenceEmail" /
+--                          "confluenceToken" / "confluenceSpaceKey"
+--   issues.payload      -> "confluencePageId" / "confluencePageUrl"
+--                          (page pointers written by publish-confluence)
+--
+-- No seed data is inserted; teams configure Confluence through the sync
+-- settings panel. scripts/install-schema-extensions.sh runs this script on
+-- install and on ./start.sh pull.

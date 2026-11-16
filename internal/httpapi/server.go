@@ -361,6 +361,8 @@ func newWithNotifications(s *repo.Store, e *engine.Engine, syncSvc *tracker.Serv
 	g.PUT("/api/issues", api.issues.issues)
 	g.POST("/api/issues", api.issues.issues)
 	g.POST("/api/issues/import-tapd", api.issues.importTAPD)
+	g.POST("/api/issues/import-jira", api.issues.importJira)
+	g.POST("/api/webhooks/:source", api.webhookIncoming)
 	// master(net/http) 的 /api/issues/<id> 子树对任意方法先做存在性检查
 	//（404 JSON），再按 (子路径, method) 分派，不匹配的组合兜底 404 text。
 	// gin 用 Any 注册 + handler 内方法分派复刻该语义。
@@ -373,6 +375,7 @@ func newWithNotifications(s *repo.Store, e *engine.Engine, syncSvc *tracker.Serv
 	g.Any("/api/issues/:id/reopen", api.issues.issue)
 	g.Any("/api/issues/:id/close", api.issues.issue)
 	g.Any("/api/issues/:id/resync-tapd", api.issues.issue)
+	g.Any("/api/issues/:id/publish-confluence", api.issues.issue)
 	g.Any("/api/issues/:id/requirement", api.issues.issue)
 	g.Any("/api/issues/:id/sops", api.issues.issue)
 	g.Any("/api/issues/:id/dispatch", api.issues.issue)
@@ -852,7 +855,7 @@ func basicAuth(user, pass string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// The runner machine plane has its own bind/session authentication and
 		// must remain usable behind a gateway login or preview Basic Auth.
-		if c.Request.URL.Path == insightIngestPath || strings.HasPrefix(c.Request.URL.Path, "/runners/") || strings.HasPrefix(c.Request.URL.Path, "/internal/agent-tools/") {
+		if c.Request.URL.Path == insightIngestPath || strings.HasPrefix(c.Request.URL.Path, "/runners/") || strings.HasPrefix(c.Request.URL.Path, "/internal/agent-tools/") || strings.HasPrefix(c.Request.URL.Path, "/api/webhooks/") {
 			c.Next()
 			return
 		}

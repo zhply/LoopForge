@@ -19,6 +19,7 @@ import (
 // issue trackers (Gongfeng issues + TAPD stories).
 type Service struct {
 	githubAPIBase         string // Tests inject an HTTP server; production uses api.github.com.
+	gitlabAPIBase         string // Tests inject an HTTP server (with /api/v4); production derives it from the gitlab: host.
 	cfg                   *syncConfigHolder
 	gongfeng              *MCPClient
 	tapd                  *MCPClient
@@ -221,6 +222,10 @@ func (s *Service) StartAutoSync(store IssueStoreAdapter) {
 				if err := s.PullAll(store); err != nil {
 					log.Printf("auto-sync error: %v", err)
 				}
+				// Announce merged deliveries on Jira (no-op unless enabled).
+				if n := s.WriteBackJiraDeliveries(store); n > 0 {
+					log.Printf("jira write-back: %d work items updated", n)
+				}
 			}
 		}
 	}()
@@ -318,7 +323,15 @@ func (s *Service) PullAll(store IssueStoreAdapter) error {
 			}
 			continue
 		}
-		if repo.Provider != "gongfeng" || repo.GongfengProjectID == "" {
+		if (repo.Provider != "gongfeng" && repo.Provider != "gitlab") || repo.GongfengProjectID == "" {
+			continue
+		}
+		if repo.Provider == "gitlab" {
+			n, err := s.pullGitLabIssues(store, repo)
+			if err != nil {
+				lastErr = err
+			}
+			syncCount += n
 			continue
 		}
 		client, source, err := s.trackerClientForProject("gongfeng", repo.ProjectID)
@@ -334,6 +347,16 @@ func (s *Service) PullAll(store IssueStoreAdapter) error {
 	}
 
 	n, err := s.pullTAPDStories(store)
+	if err != nil {
+		if lastErr == nil {
+			lastErr = err
+		} else {
+			lastErr = fmt.Errorf("%v；%v", lastErr, err)
+		}
+	}
+	syncCount += n
+
+	n, err = s.pullJiraIssues(store)
 	if err != nil {
 		if lastErr == nil {
 			lastErr = err
@@ -403,6 +426,37 @@ func (s *Service) PullScheduleJob(store IssueStoreAdapter, job domain.ScheduleJo
 			}
 		}
 		return count, nil, last
+	case "gitlab":
+		count := 0
+		var last error
+		for _, repo := range store.Repositories() {
+			if repo.Provider == "gitlab" && repo.GongfengProjectID != "" && (job.ProjectID == "" || repo.ProjectID == job.ProjectID) {
+				n, err := s.pullGitLabIssues(store, repo)
+				count += n
+				if err != nil {
+					last = err
+				}
+			}
+		}
+		return count, nil, last
+	case "jira":
+		if strings.TrimSpace(job.ProjectID) == "" {
+			return 0, nil, fmt.Errorf("schedule job needs a projectId for jira sync")
+		}
+		project, ok := store.Project(job.ProjectID)
+		if !ok {
+			return 0, nil, fmt.Errorf("项目 %s 不存在", job.ProjectID)
+		}
+		key := strings.TrimSpace(project.JiraProjectKey)
+		if key == "" {
+			return 0, nil, fmt.Errorf("项目 %s 未配置 Jira Project Key", job.ProjectID)
+		}
+		client, err := s.jiraClient()
+		if err != nil {
+			return 0, nil, err
+		}
+		n, err := s.pullJiraProject(client, store, job.ProjectID, key, s.cfg.Get().JiraJQL)
+		return n, nil, err
 	case "tapd":
 		if strings.TrimSpace(job.TAPDWorkspaceID) == "" || strings.TrimSpace(job.TAPDIterationID) == "" {
 			return 0, nil, fmt.Errorf("schedule job needs TAPD workspace and iteration")

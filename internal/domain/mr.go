@@ -14,6 +14,10 @@ var githubPRURL = regexp.MustCompile(`https?://github\.com/([A-Za-z0-9_.-]+/[A-Z
 
 var gongfengMRURL = regexp.MustCompile(`https?://git\.example\.com/([^\s"'<>#]+)/merge_requests/(\d+)`)
 
+// gitlabMRURL matches standard GitLab merge request URLs from any self-hosted
+// instance: https://<host>/<namespace>/<project>/-/merge_requests/<iid>.
+var gitlabMRURL = regexp.MustCompile(`https?://([^/\s"'<>#]+)/([A-Za-z0-9_./-]+?)/-/merge_requests/(\d+)`)
+
 // GongfengMRRef is one merge request URL extracted from free text.
 type GongfengMRRef struct {
 	Project string
@@ -30,31 +34,46 @@ func ParseGongfengMR(text string) (project string, iid int, url string, ok bool)
 	return refs[0].Project, refs[0].IID, refs[0].URL, true
 }
 
-// ParseGongfengMRs extracts unique Gongfeng merge request URLs in appearance order.
+// ParseGongfengMRs extracts unique merge request URLs in appearance order:
+// GitHub pull requests, Gongfeng MRs, and standard GitLab MRs from any
+// self-hosted instance (mapped to gitlab:<host>/<path> project refs).
 func ParseGongfengMRs(text string) []GongfengMRRef {
 	for _, match := range githubPRURL.FindAllStringSubmatch(text, -1) {
 		text = strings.ReplaceAll(text, match[0], "https://git.example.com/github:"+match[1]+"/merge_requests/"+match[2])
 	}
-	matches := gongfengMRURL.FindAllStringSubmatch(text, -1)
-	if len(matches) == 0 {
-		return nil
-	}
-	out := make([]GongfengMRRef, 0, len(matches))
+	out := make([]GongfengMRRef, 0, 4)
 	seen := map[string]struct{}{}
-	for _, match := range matches {
-		project := strings.TrimSuffix(strings.TrimSuffix(match[1], "/"), "/-")
-		iid, _ := strconv.Atoi(match[2])
+	add := func(project string, iid int) {
+		project = strings.TrimSuffix(strings.TrimSuffix(strings.TrimSpace(project), "/"), "/-")
 		if project == "" || iid <= 0 {
-			continue
+			return
 		}
 		key := gongfengMRKey(project, iid)
 		if _, ok := seen[key]; ok {
-			continue
+			return
 		}
 		seen[key] = struct{}{}
 		out = append(out, GongfengMRRef{Project: project, IID: iid, URL: GongfengMRURL(project, iid)})
 	}
+	for _, match := range gitlabMRURL.FindAllStringSubmatch(text, -1) {
+		host := strings.ToLower(match[1])
+		if host == "git.example.com" || host == "github.com" {
+			continue
+		}
+		add("gitlab:"+match[1]+"/"+match[2], atoiMR(match[3]))
+	}
+	for _, match := range gongfengMRURL.FindAllStringSubmatch(text, -1) {
+		add(match[1], atoiMR(match[2]))
+	}
+	if len(out) == 0 {
+		return nil
+	}
 	return out
+}
+
+func atoiMR(raw string) int {
+	n, _ := strconv.Atoi(raw)
+	return n
 }
 
 // MRArtifactPriority ranks run artifacts when recovering an issue's own MR.

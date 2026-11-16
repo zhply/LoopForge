@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
 
 // DeliveryMR is one merge request delivered for a work item. A multi-repository
@@ -20,6 +21,9 @@ type DeliveryMR struct {
 	// GongfengState is the raw Gongfeng state from a live lookup; empty when
 	// the MR was only recovered from artifact text.
 	GongfengState string `json:"-"`
+	// JiraBackAt records when this merged MR was announced on the source
+	// Jira issue (P3 write-back); zero means not yet written back.
+	JiraBackAt time.Time `json:"jiraBackAt,omitempty"`
 }
 
 // GongfengMRURL is the canonical web URL of a Gongfeng merge request.
@@ -31,7 +35,27 @@ func GongfengMRURL(project string, iid int) string {
 	if strings.HasPrefix(project, "github:") {
 		return fmt.Sprintf("https://github.com/%s/pull/%d", strings.TrimPrefix(project, "github:"), iid)
 	}
+	if host, path, ok := SplitGitLabProject(project); ok {
+		return fmt.Sprintf("https://%s/%s/-/merge_requests/%d", host, path, iid)
+	}
 	return fmt.Sprintf("https://git.example.com/%s/-/merge_requests/%d", project, iid)
+}
+
+// SplitGitLabProject splits a "gitlab:<host>/<path>" remote project id into its
+// host and repository path. It returns ok=false for anything else, including
+// the bare form without the prefix.
+func SplitGitLabProject(project string) (host, path string, ok bool) {
+	rest := strings.TrimPrefix(strings.TrimSpace(project), "gitlab:")
+	if rest == strings.TrimSpace(project) || rest == "" {
+		return "", "", false
+	}
+	host, path, found := strings.Cut(rest, "/")
+	host = strings.TrimSpace(host)
+	path = strings.Trim(strings.TrimSpace(path), "/")
+	if !found || host == "" || path == "" {
+		return "", "", false
+	}
+	return host, path, true
 }
 
 // AggregateDeliveryMRState folds per-MR states into the work item label state.

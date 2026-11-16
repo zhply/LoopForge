@@ -50,8 +50,13 @@ type Issue struct {
 	Source            string                  `json:"source,omitempty"` // local, gongfeng, tapd
 	// TapdID is an optional metrics-only link for a platform-created requirement.
 	// It does not create a tracker binding or authorize TAPD write-back.
-	TapdID      string       `json:"tapdId,omitempty"`
-	ExternalRef *ExternalRef `json:"externalRef,omitempty"`
+	TapdID string `json:"tapdId,omitempty"`
+	// ConfluencePageID/URL record the product-doc page this requirement's
+	// plan was published to (publish-confluence). They are display-only
+	// pointers; the page itself stays authoritative in Confluence.
+	ConfluencePageID  string       `json:"confluencePageId,omitempty"`
+	ConfluencePageURL string       `json:"confluencePageUrl,omitempty"`
+	ExternalRef       *ExternalRef `json:"externalRef,omitempty"`
 	// ConversationSessionID is the conversation that identified and created
 	// this requirement while changing code directly, without an SOP.
 	ConversationSessionID string    `json:"conversationSessionId,omitempty"`

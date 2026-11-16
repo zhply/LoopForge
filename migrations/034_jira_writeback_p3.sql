@@ -1,0 +1,13 @@
+-- Idempotent MySQL migration: P3 "MR → Jira delivery write-back".
+--
+-- No DDL is required. The new fields live inside existing JSON payloads and
+-- are read with zero-value defaults by code, so old rows keep working:
+--
+--   sync_config.payload -> "jiraWriteBackEnabled" (platform switch, off by
+--                          default; read-only import remains the default)
+--   issues.payload      -> deliveryMrs[].jiraBackAt (per-MR write-back
+--                          timestamp used as the idempotency marker)
+--
+-- No seed data is inserted; teams opt in through the sync settings panel.
+-- scripts/install-schema-extensions.sh runs this script on install and on
+-- ./start.sh pull.

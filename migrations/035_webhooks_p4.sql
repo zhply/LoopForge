@@ -1,0 +1,13 @@
+-- Idempotent MySQL migration: P4 "Inbound webhook event center".
+--
+-- No DDL is required. The new field lives inside the sync_config JSON payload
+-- and is read with a zero-value default by code, so old rows keep working:
+--
+--   sync_config.payload -> "webhookSecret" (shared secret echoed by external
+--                          systems on /api/webhooks/gitlab and /api/webhooks/
+--                          jira; write-only over the API)
+--
+-- No seed data is inserted; teams generate a secret in the sync settings
+-- panel and register the callback URLs in GitLab / Jira. scripts/
+-- install-schema-extensions.sh runs this script on install and on
+-- ./start.sh pull.

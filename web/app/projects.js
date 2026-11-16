@@ -39,7 +39,7 @@ function bindUserSearches(root=document){
   });
 }
 // Project admin has two levels: #/projects lists cards, #/projects/<id>[/<tab>] edits one project.
-const PROJECT_ADMIN_TABS=[{id:'basic',label:'基本信息'},{id:'repos',label:'代码仓库'},{id:'members',label:'项目成员'},{id:'tapd',label:'高级设置'}];
+const PROJECT_ADMIN_TABS=[{id:'basic',label:'基本信息'},{id:'repos',label:'代码仓库'},{id:'members',label:'项目成员'},{id:'integration',label:'外部集成'},{id:'tapd',label:'高级设置'}];
 // TAPD is a legacy tracker: its settings appear only once the platform has a TAPD integration or the project already uses one.
 function tapdIntegrationAvailable(project){
   if(project&&(String(project.tapdWorkspaceId||'').trim()||String(project.tapdIterationId||'').trim()))return true;
@@ -171,6 +171,57 @@ function projectRepoListHTML(repos,defaultId){
   if(!repos.length)return projectAdminEmptyHTML('repo','还没有绑定代码仓库','绑定后，Agent 执行 SOP 时会自动克隆仓库并在工作分支上提交。第一个仓库会自动设为默认。',`<ol class="pa-steps"><li><span>1</span>粘贴 GitHub 链接或 Git SSH 地址</li><li><span>2</span>确认分支</li><li><span>3</span>保存即生效</li></ol><button type="button" class="button primary" data-repo-add>＋ 添加第一个仓库</button>`);
   return `<div class="pa-rgrid">${repos.map(r=>repoCardHTML(r,r.id===defaultId)).join('')}<button type="button" class="pa-rc-add" data-repo-add><i>${paIcon('plus',14)}</i><b>添加仓库</b></button></div>`;
 }
+// 集成配置（Jira / Confluence / Webhook）是平台级设置，但项目配置页是用户
+// 最容易找到的位置，所以在这里提供同一份表单，用独立按钮保存，避免项目
+// 表单提交时误清空凭据（Token 留空即保持不变）。
+function projectIntegrationPanel(d,saved){
+  const sc=state.data.syncConfig||{};
+  const jiraKey=saved?.jiraProjectKey||d?.jiraProjectKey||'';
+  const secretInput=(name,field,placeholder)=>`<input class="pa-input" type="password" name="${name}" value="" autocomplete="new-password" placeholder="${sc[field]?'已保存，留空保持不变':placeholder}">`;
+  const jira=paSection('Jira','导入本项目需求；MR 合并后可自动评论并流转关闭。',`<div class="pa-rows">
+      ${paRow('Jira 地址','例如 https://jira.example.com（平台级）。',`<input class="pa-input mono" name="paJiraUrl" value="${escapeHTML(sc.jiraBaseUrl||'')}" placeholder="https://jira.example.com" spellcheck="false">`)}
+      ${paRow('邮箱','Jira 账号邮箱，用于 Basic 认证。',`<input class="pa-input" name="paJiraEmail" value="${escapeHTML(sc.jiraEmail||'')}" placeholder="user@example.com">`)}
+      ${paRow('API Token',sc.jiraTokenConfigured?'已保存；留空保持不变。':'Jira API Token 或个人访问令牌。',secretInput('paJiraToken','jiraTokenConfigured','粘贴 Token'))}
+      ${paRow('项目 Key','本项目对应的 Jira 项目 Key，导入需求时使用。',`<input class="pa-input mono" name="paJiraKey" value="${escapeHTML(jiraKey)}" placeholder="PROJ" spellcheck="false">`)}
+      ${paRow('合并后自动回写','MR 合并后向 Jira 工作项发一条交付评论并流转到已完成。',`<label class="pa-switch-wrap"><input type="checkbox" name="paJiraWriteBack" role="switch" ${sc.jiraWriteBackEnabled?'checked':''} aria-label="MR 合并后自动回写 Jira"><span class="pa-switch"></span></label>`,{attrs:' data-pa-row-inline'})}
+    </div>`);
+  const confluence=paSection('Confluence','把需求空间的方案文档发布为 Confluence 页面，并在需求上留痕。',`<div class="pa-rows">
+      ${paRow('Confluence 地址','例如 https://confluence.example.com（平台级）。',`<input class="pa-input mono" name="paConfluenceUrl" value="${escapeHTML(sc.confluenceBaseUrl||'')}" placeholder="https://confluence.example.com" spellcheck="false">`)}
+      ${paRow('邮箱','Confluence 账号邮箱，用于 Basic 认证。',`<input class="pa-input" name="paConfluenceEmail" value="${escapeHTML(sc.confluenceEmail||'')}" placeholder="user@example.com">`)}
+      ${paRow('API Token',sc.confluenceTokenConfigured?'已保存；留空保持不变。':'Confluence API Token 或个人访问令牌。',secretInput('paConfluenceToken','confluenceTokenConfigured','粘贴 Token'))}
+      ${paRow('Space Key','方案页面默认发布的 Confluence 空间。',`<input class="pa-input mono" name="paConfluenceSpace" value="${escapeHTML(sc.confluenceSpaceKey||'')}" placeholder="PROJ" spellcheck="false">`)}
+    </div>`);
+  const webhook=paSection('GitLab 与 Webhook','仓库在「代码仓库」页粘贴 GitLab 地址即可识别；合并请求与 Jira 变更可回调即时刷新。',`<div class="pa-rows">
+      ${paRow('Webhook Secret',sc.webhookSecretConfigured?'已保存；留空保持不变。':'用于校验 /api/webhooks/gitlab 与 /api/webhooks/jira 的回调。',secretInput('paWebhookSecret','webhookSecretConfigured','生成或粘贴 Secret'))}
+      ${paRow('回调地址','GitLab：POST 本站地址 + /api/webhooks/gitlab（Secret 填 GitLab Token 头）；Jira：POST 本站地址 + /api/webhooks/jira（请求头 X-Webhook-Secret）。未配置回调时按同步间隔轮询。','')}
+    </div>`,`<button type="button" class="button primary small" data-pa-integration-save>保存集成配置</button>`);
+  return jira+confluence+webhook;
+}
+async function saveProjectIntegration(){
+  const f=$('#projectAdminForm');if(!f)return;
+  const val=n=>String(f.elements[n]?.value??'').trim();
+  const base=state.data.syncConfig||{};
+  const payload={...base,
+    jiraBaseUrl:val('paJiraUrl'),jiraEmail:val('paJiraEmail'),jiraToken:val('paJiraToken'),
+    jiraWriteBackEnabled:!!f.elements.paJiraWriteBack?.checked,
+    confluenceBaseUrl:val('paConfluenceUrl'),confluenceEmail:val('paConfluenceEmail'),
+    confluenceToken:val('paConfluenceToken'),confluenceSpaceKey:val('paConfluenceSpace'),
+    webhookSecret:val('paWebhookSecret')};
+  delete payload.jiraTokenConfigured;delete payload.confluenceTokenConfigured;delete payload.webhookSecretConfigured;
+  const btn=f.querySelector('[data-pa-integration-save]');if(btn)btn.disabled=true;
+  try{
+    state.data.syncConfig=await api('/api/sync/config',{method:'PUT',body:JSON.stringify(payload)});
+    const id=state.projectAdminDetailId,project=(state.data.projects||[]).find(p=>p.id===id),key=val('paJiraKey');
+    if(project&&String(project.jiraProjectKey||'')!==key){
+      const updated=await api('/api/projects',{method:'PUT',body:JSON.stringify({...project,jiraProjectKey:key})});
+      const i=(state.data.projects||[]).findIndex(p=>p.id===updated.id);if(i>=0)state.data.projects[i]=updated;
+      if(state.projectDraft&&state.projectDraft.id===updated.id){state.projectDraft.jiraProjectKey=key;if(state.projectDraftBase)state.projectDraftBase.jiraProjectKey=key}
+    }
+    renderProjectDetail({force:true});
+    toast('集成配置已保存','ok');
+  }catch(err){toast(err.message,'err')}
+  finally{if(btn)btn.disabled=false}
+}
 function projectAdminFormHTML(d,ctx){
   const {creating,custom,repos,saved}=ctx;
   const defaultRepo=repos.some(r=>r.id===d.defaultRepositoryId)?d.defaultRepositoryId:'';
@@ -195,7 +246,7 @@ function projectAdminFormHTML(d,ctx){
       ${paRow('Workspace ID','TAPD 项目 URL 中 /tapd_fe/ 后的数字。',`<input class="pa-input mono" name="tapdWorkspaceId" value="${escapeHTML(d.tapdWorkspaceId||'')}" placeholder="例如 20375341" spellcheck="false">`)}
       ${paRow('Iteration ID','可选，只导入该迭代内的需求。',`<input class="pa-input mono" name="tapdIterationId" value="${escapeHTML(d.tapdIterationId||'')}" placeholder="留空导入全部" spellcheck="false">`)}
     </div>`):'')+paSection('危险操作','',`<div class="pa-rows">${projectDeleteRow(saved)}${configured?paRow(`清除已保存的 TAPD 配置${configured?' <span class="pa-chip">当前已配置</span>':''}`,'保存项目设置时同时清空 Workspace 与 Iteration，已导入的需求不受影响。',`<label class="pa-switch-wrap"><input type="checkbox" name="tapdClear" role="switch" ${d.tapdClear?'checked':''} aria-label="清除已保存的 TAPD 配置"><span class="pa-switch danger"></span></label>`,{attrs:' data-pa-row-inline'}):''}</div>`);
-  const panels={basic,repos:paSection('代码仓库','Agent 执行 SOP 时会克隆这些仓库。仓库保存后立即生效，无需点「保存项目设置」。',`<div data-pa-repo-box>${projectRepoListHTML(repos,saved?.defaultRepositoryId||'')}</div>`,repos.length?'<button type="button" class="button ghost small" data-repo-add>＋ 添加仓库</button>':''),members:memberPanel,tapd:tapdPanel};
+  const panels={basic,repos:paSection('代码仓库','Agent 执行 SOP 时会克隆这些仓库。仓库保存后立即生效，无需点「保存项目设置」。粘贴 GitHub、工蜂或自建 GitLab 地址均可。',`<div data-pa-repo-box>${projectRepoListHTML(repos,saved?.defaultRepositoryId||'')}</div>`,repos.length?'<button type="button" class="button ghost small" data-repo-add>＋ 添加仓库</button>':''),members:memberPanel,integration:projectIntegrationPanel(d,saved),tapd:tapdPanel};
   const tab=state.projectAdminTab||'basic';
   return PROJECT_ADMIN_TABS.map(t=>`<section class="pa-panel" data-pa-panel="${t.id}" id="paPanel-${t.id}" role="tabpanel" aria-labelledby="paTab-${t.id}"${t.id===tab?'':' hidden'}>${creating&&t.id!=='basic'?'':panels[t.id]}</section>`).join('')
     +`<div class="pa-savebar-dock"><div class="pa-savebar" data-pa-savebar inert><span class="pa-savebar-tx"><i></i><span data-pa-savebar-text>有未保存的修改</span></span><button type="button" class="button ghost" data-pa-discard>放弃修改</button><button type="submit" class="button primary" data-pa-submit>保存项目设置</button></div></div>`;
@@ -295,6 +346,9 @@ function projectAdminFail(form,name,message){
 }
 function onProjectAdminInput(e){
   const t=e.target,form=$('#projectAdminForm');if(!form||!t?.name&&!t?.dataset)return;
+  // Integration fields save through their own button; they must not mark the
+  // project draft dirty.
+  if(t.closest?.('[data-pa-panel="integration"]'))return;
   if(t.matches?.('[data-pa-color-custom]')){setProjectAdminColor(t.value);return}
   t.classList?.remove('bad');t.closest?.('[data-user-combobox]')?.querySelector('[data-user-combobox-trigger]')?.classList.remove('bad');
   captureProjectAdminForm();
@@ -325,6 +379,7 @@ function bindProjectAdminForm(form){
     if(t.closest('[data-pa-ident-auto]')){state.projectIdentCustom=false;form.elements.id?.classList.remove('bad');form.elements.key?.classList.remove('bad');syncProjectIdentity();renderProjectAdminHead();syncProjectAdminSaveBar();return}
     if(t.closest('[data-pa-ident-collapse]')){state.projectIdentCustom=false;syncProjectIdentity();return}
     if(t.closest('[data-pa-discard]')){discardProjectAdminDraft();return}
+    if(t.closest('[data-pa-integration-save]')){saveProjectIntegration();return}
     if(t.closest('[data-repo-add]')){if(typeof openRepoDrawer==='function')openRepoDrawer('');return}
     const edit=t.closest('[data-repo-edit]');if(edit){if(typeof openRepoDrawer==='function')openRepoDrawer(edit.dataset.repoEdit);return}
     const del=t.closest('[data-repo-delete]');if(del){deleteProjectRepository(del.dataset.repoDelete);return}

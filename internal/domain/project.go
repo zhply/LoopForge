@@ -26,15 +26,17 @@ type Project struct {
 	RunEval             RunEvalPolicy     `json:"runEval,omitempty"`
 	// Deprecated project-level credential fields are kept only so old payloads
 	// can be decoded and scrubbed by the schema migration.
-	GitToken                     string    `json:"-"`
-	GitTokenConfigured           bool      `json:"-"`
-	CodeBuddyAPIKey              string    `json:"-"`
-	CodeBuddyAPIKeyConfigured    bool      `json:"-"`
-	CodeBuddyInternetEnvironment string    `json:"-"`
-	TAPDWorkspaceID              string    `json:"tapdWorkspaceId,omitempty"`
-	TAPDIterationID              string    `json:"tapdIterationId,omitempty"`
-	CreatedAt                    time.Time `json:"createdAt"`
-	UpdatedAt                    time.Time `json:"updatedAt"`
+	GitToken                     string `json:"-"`
+	GitTokenConfigured           bool   `json:"-"`
+	CodeBuddyAPIKey              string `json:"-"`
+	CodeBuddyAPIKeyConfigured    bool   `json:"-"`
+	CodeBuddyInternetEnvironment string `json:"-"`
+	TAPDWorkspaceID              string `json:"tapdWorkspaceId,omitempty"`
+	TAPDIterationID              string `json:"tapdIterationId,omitempty"`
+	// JiraProjectKey binds the project to one Jira project for read-only import.
+	JiraProjectKey string    `json:"jiraProjectKey,omitempty"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
 	// ArchivedAt marks a deleted project. It is hidden from project lists and
 	// syncs but its requirements, runs and settings are kept so it can be
 	// restored; the id stays taken.

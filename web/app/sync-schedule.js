@@ -3,7 +3,9 @@ let scheduleEditorKind='dispatch';
 let scheduleModalVersion=0;
 let scheduleModalOpener=null;
 // --- Sync Panel (embedded in Issues view) ---
-function sourceBadge(issue){if(!issue.source||issue.source==='local')return '<span class="sync-badge local">本地</span>';if(issue.source==='github')return '<span class="sync-badge local">GitHub</span>';if(issue.source==='gongfeng')return '<span class="sync-badge gongfeng">工蜂</span>';if(issue.source==='tapd')return '<span class="sync-badge tapd">TAPD</span>';return ''}
+function sourceBadge(issue){if(!issue.source||issue.source==='local')return '<span class="sync-badge local">本地</span>';if(issue.source==='github')return '<span class="sync-badge local">GitHub</span>';if(issue.source==='gongfeng')return '<span class="sync-badge gongfeng">工蜂</span>';if(issue.source==='gitlab')return '<span class="sync-badge local">GitLab</span>';if(issue.source==='jira')return '<span class="sync-badge tapd">Jira</span>';if(issue.source==='tapd')return '<span class="sync-badge tapd">TAPD</span>';return ''}
+function syncSourceName(source){return {github:'GitHub',gongfeng:'工蜂',gitlab:'GitLab',jira:'Jira',tapd:'TAPD'}[String(source||'').toLowerCase()]||String(source||'')}
+const syncSourceKeys=['github','gongfeng','gitlab','jira','tapd'];
 function externalLink(issue){if(!issue.externalRef)return '';return `<a href="${escapeHTML(safeURL(issue.externalRef.externalUrl))}" target="_blank" rel="noopener noreferrer" class="ext-link" title="${escapeHTML(issue.externalRef.externalUrl)}">↗</a>`}
 function renderSync(){
   const cfg=state.data.syncConfig||{};const logs=state.data.syncLogs||[];
@@ -19,7 +21,7 @@ function renderSync(){
   // Only the most recent sync round counts for status: stale failures from
   // older rounds (or legacy unscoped entries) must not keep the badge red.
   const recentLogs=scopedLogs.filter(l=>!knownTime(cfg.lastSyncAt)||new Date(l.startedAt).getTime()>=new Date(cfg.lastSyncAt).getTime()-15*60*1000);
-  const recentBySource=['github','gongfeng','tapd'].map(source=>recentLogs.find(l=>l.source===source)).filter(Boolean);
+  const recentBySource=syncSourceKeys.map(source=>recentLogs.find(l=>l.source===source)).filter(Boolean);
   const scopedFails=recentBySource.filter(l=>l.status==='failed');
   const badge=$('#syncBadge');
   if(syncing){badge.className='sync-badge live';badge.textContent='同步中'}
@@ -28,10 +30,10 @@ function renderSync(){
   else{badge.className='sync-badge live';badge.textContent='未配置'}
   const more=$('#issueHeadingMore');
   if(more){const failed=!syncing&&scopedFails.length>0;more.classList.toggle('has-alert',failed);more.title=failed?'外部同步失败':''}
-  const latestBySource=['github','gongfeng','tapd'].map(source=>scopedLogs.find(l=>l.source===source)).filter(Boolean);
+  const latestBySource=syncSourceKeys.map(source=>scopedLogs.find(l=>l.source===source)).filter(Boolean);
   const diag=[...new Set(scopedFails.flatMap(l=>String(l.message||'').split(/[；;]/)).map(s=>s.trim()).filter(Boolean))];
   const diagText=diag.join('；');
-  $('#syncPanelSummary').innerHTML=`<span class="sync-stat"><b>${githubCount}</b>GitHub</span>${gfCount?`<span class="sync-stat"><b>${gfCount}</b>工蜂</span>`:''}${tapdCount?`<span class="sync-stat"><b>${tapdCount}</b>TAPD</span>`:''}<span class="sync-stat">最近：${lastSync}</span>${latestBySource.map(l=>`<span class="sync-stat ${l.status==='failed'?'danger':'success'}"><b>${l.status==='failed'?'!':'✓'}</b>${l.source==='github'?'GitHub':l.source==='gongfeng'?'工蜂':'TAPD'} ${l.status==='failed'?'异常':'正常'}</span>`).join('')}${diagText?`<span class="sync-stat danger sync-error-detail" title="${escapeHTML(diagText)}"><b>诊断</b>${escapeHTML(diagText)}</span>`:''}`;
+  $('#syncPanelSummary').innerHTML=`<span class="sync-stat"><b>${githubCount}</b>GitHub</span>${gfCount?`<span class="sync-stat"><b>${gfCount}</b>工蜂</span>`:''}${tapdCount?`<span class="sync-stat"><b>${tapdCount}</b>TAPD</span>`:''}<span class="sync-stat">最近：${lastSync}</span>${latestBySource.map(l=>`<span class="sync-stat ${l.status==='failed'?'danger':'success'}"><b>${l.status==='failed'?'!':'✓'}</b>${syncSourceName(l.source)} ${l.status==='failed'?'异常':'正常'}</span>`).join('')}${diagText?`<span class="sync-stat danger sync-error-detail" title="${escapeHTML(diagText)}"><b>诊断</b>${escapeHTML(diagText)}</span>`:''}`;
   const project=currentProject();
   const githubButton=document.querySelector("#importGitHubIssues");if(githubButton)githubButton.disabled=!!syncing;
   const repos=(state.data.repositories||[]).filter(r=>r.projectId===state.projectFilter&&r.provider==='github');
@@ -47,6 +49,19 @@ function renderSync(){
     $('#syncTAPDWorkspace').value=project?.tapdWorkspaceId||'';
     $('#syncTAPDIteration').value=project?.tapdIterationId||'';
     $('#syncTAPDURL').value=cfg.tapdMcpUrl||'';
+    $('#syncJiraURL').value=cfg.jiraBaseUrl||'';
+    $('#syncJiraEmail').value=cfg.jiraEmail||'';
+    $('#syncJiraToken').value='';
+    $('#syncJiraToken').placeholder=cfg.jiraTokenConfigured?'已保存（留空保持不变）':'';
+    $('#syncJiraProjectKey').value=project?.jiraProjectKey||'';
+    $('#syncJiraWriteBack').checked=!!cfg.jiraWriteBackEnabled;
+    $('#syncConfluenceURL').value=cfg.confluenceBaseUrl||'';
+    $('#syncConfluenceEmail').value=cfg.confluenceEmail||'';
+    $('#syncConfluenceToken').value='';
+    $('#syncConfluenceToken').placeholder=cfg.confluenceTokenConfigured?'已保存（留空保持不变）':'';
+    $('#syncConfluenceSpaceKey').value=cfg.confluenceSpaceKey||'';
+    $('#syncWebhookSecret').value='';
+    $('#syncWebhookSecret').placeholder=cfg.webhookSecretConfigured?'已保存（留空保持不变）':'';
     $('#syncInterval').value=cfg.autoSyncIntervalSec||300;
     $('#syncAutoEnabled').checked=cfg.autoSyncEnabled||false;
   }
@@ -86,9 +101,9 @@ function scheduleJobTimingLabel(job){
 }
 function scheduleSourceLabel(job){
   const source=String(job?.source||'').toLowerCase();
-  if(source==='github')return '只同步 GitHub';
   if(source==='gongfeng')return '只同步工蜂';
-  if(source==='tapd')return '只同步 TAPD';
+  const name={github:'GitHub',gitlab:'GitLab',jira:'Jira',tapd:'TAPD'}[source];
+  if(name)return `只同步 ${name}`;
   return '所有已配置来源';
 }
 function scheduleIssueStatusValues(job){
@@ -303,7 +318,7 @@ function fillScheduleJobForm(job={}){
   f.elements.maxDispatch.value=job.maxDispatch||'';
   f.elements.enabled.checked=job.id?!!job.enabled:true;
   const source=String(job.source||'').toLowerCase();
-  if(f.elements.source)f.elements.source.value=(source==='github'||source==='gongfeng'||source==='tapd')?source:'';
+  if(f.elements.source)f.elements.source.value=syncSourceKeys.includes(source)?source:'';
   const selected=new Set(scheduleIssueStatusValues(job.id?job:{}));
   f.querySelectorAll('[name="issueStatus"]').forEach(cb=>{cb.checked=selected.has(cb.value)});
   const sops=runnableWorkflowOptions();
@@ -606,14 +621,24 @@ async function deleteScheduleJob(id){
   }catch(err){toast(err.message)}
 }
 async function refreshSyncStatus(){try{const wasSyncing=!!state.data.syncing,[status,jobs]=await Promise.all([api('/api/sync/status',{silent:true}),api('/api/schedule-jobs',{silent:true})]);state.data.syncLogs=status.logs||[];state.data.syncing=status.syncing||false;state.data.syncConfig=status.config||state.data.syncConfig;state.data.scheduleJobs=jobs||[];renderSync();if(wasSyncing&&!state.data.syncing)await refreshIssues()}catch(e){if(!state.data.syncing)$('#syncBadge').textContent='连接异常'}}
-async function syncNow(){try{$('#syncNowBtn').textContent='⟳ 同步中…';$('#syncNowBtn').disabled=true;state.data.syncing=true;renderSync();await api('/api/sync/now',{method:'POST',body:'{}'});toast('同步已启动…');let attempts=0,checking=false;const poll=setInterval(async()=>{if(checking)return;checking=true;attempts++;try{const status=await api('/api/sync/status');state.data.syncLogs=status.logs||[];state.data.syncing=status.syncing||false;state.data.syncConfig=status.config||state.data.syncConfig;if(!state.data.syncing){clearInterval(poll);const issues=await api('/api/issues');state.data.issues=issues;renderIssues();renderSync();const scoped=state.data.syncLogs.filter(l=>!state.projectFilter||!l.projectId||l.projectId===state.projectFilter);const failed=['github','gongfeng','tapd'].map(source=>scoped.find(l=>l.source===source)).filter(l=>l&&l.status==='failed');toast(failed.length?`同步未完全成功：${failed.map(l=>l.source==='github'?'GitHub':l.source==='gongfeng'?'工蜂':'TAPD').join('、')}，详见诊断`:`同步完成：已刷新外部工作项`)}else if(attempts>=80){clearInterval(poll);renderSync();toast('同步仍在后台执行，可稍后查看结果')}}catch(e){if(attempts>=80){clearInterval(poll);state.data.syncing=false;renderSync();toast(`同步状态检查失败：${e.message}`)}}finally{checking=false}},1500)}catch(e){toast(e.message);state.data.syncing=false;renderSync()}}
+async function syncNow(){try{$('#syncNowBtn').textContent='⟳ 同步中…';$('#syncNowBtn').disabled=true;state.data.syncing=true;renderSync();await api('/api/sync/now',{method:'POST',body:'{}'});toast('同步已启动…');let attempts=0,checking=false;const poll=setInterval(async()=>{if(checking)return;checking=true;attempts++;try{const status=await api('/api/sync/status');state.data.syncLogs=status.logs||[];state.data.syncing=status.syncing||false;state.data.syncConfig=status.config||state.data.syncConfig;if(!state.data.syncing){clearInterval(poll);const issues=await api('/api/issues');state.data.issues=issues;renderIssues();renderSync();const scoped=state.data.syncLogs.filter(l=>!state.projectFilter||!l.projectId||l.projectId===state.projectFilter);const failed=syncSourceKeys.map(source=>scoped.find(l=>l.source===source)).filter(l=>l&&l.status==='failed');toast(failed.length?`同步未完全成功：${failed.map(l=>syncSourceName(l.source)).join('、')}，详见诊断`:`同步完成：已刷新外部工作项`)}else if(attempts>=80){clearInterval(poll);renderSync();toast('同步仍在后台执行，可稍后查看结果')}}catch(e){if(attempts>=80){clearInterval(poll);state.data.syncing=false;renderSync();toast(`同步状态检查失败：${e.message}`)}}finally{checking=false}},1500)}catch(e){toast(e.message);state.data.syncing=false;renderSync()}}
 async function saveSyncConfig(){
   const project=currentProject();
   const tapdWs=$('#syncTAPDWorkspace').value.trim(),tapdIt=$('#syncTAPDIteration').value.trim();
+  const jiraToken=$('#syncJiraToken').value.trim(),jiraKey=$('#syncJiraProjectKey').value.trim();
   const cfg={
     gongfengProjectId:state.data.syncConfig?.gongfengProjectId||'',
     gongfengMcpUrl:$('#syncGongfengURL').value.trim(),
     tapdMcpUrl:$('#syncTAPDURL').value.trim(),
+    jiraBaseUrl:$('#syncJiraURL').value.trim(),
+    jiraEmail:$('#syncJiraEmail').value.trim(),
+    jiraToken,
+    jiraWriteBackEnabled:$('#syncJiraWriteBack').checked,
+    confluenceBaseUrl:$('#syncConfluenceURL').value.trim(),
+    confluenceEmail:$('#syncConfluenceEmail').value.trim(),
+    confluenceToken:$('#syncConfluenceToken').value.trim(),
+    confluenceSpaceKey:$('#syncConfluenceSpaceKey').value.trim(),
+    webhookSecret:$('#syncWebhookSecret').value.trim(),
     autoSyncIntervalSec:Number($('#syncInterval').value)||300,
     autoSyncEnabled:$('#syncAutoEnabled').checked
   };
@@ -622,7 +647,7 @@ async function saveSyncConfig(){
     state.data.syncConfig=saved;
     $('#syncAutoEnabledInline').checked=saved.autoSyncEnabled;
     if(project){
-      const updated=await api('/api/projects',{method:'PUT',body:JSON.stringify({...project,tapdWorkspaceId:tapdWs,tapdIterationId:tapdIt})});
+      const updated=await api('/api/projects',{method:'PUT',body:JSON.stringify({...project,tapdWorkspaceId:tapdWs,tapdIterationId:tapdIt,jiraProjectKey:jiraKey})});
       const idx=(state.data.projects||[]).findIndex(p=>p.id===updated.id);
       if(idx>=0)state.data.projects[idx]=updated;
     }

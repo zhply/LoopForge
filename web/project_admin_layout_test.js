@@ -154,12 +154,16 @@ assert.match(empty,/粘贴 GitHub 链接或 Git SSH 地址[^]*确认分支[^]*�
 assert.match(empty,/添加第一个仓库/);
 
 // Detail panels.
-same(vm.runInContext("PROJECT_ADMIN_TABS.map(t=>t.id)",ctx),["basic","repos","members","tapd"]);
+same(vm.runInContext("PROJECT_ADMIN_TABS.map(t=>t.id)",ctx),["basic","repos","members","integration","tapd"]);
 const draft=ctx.projectDraftFrom(projects[0]);
 same(draft.members.map(m=>m.userId),[2,3,4,5]);
 same([...ctx.projectPeopleIds(draft)],[1,2,3,4,5]);
 const edit=ctx.projectAdminFormHTML(draft,{creating:false,custom:false,repos:repositories.slice(0,2),saved:projects[0]});
-assert.equal((edit.match(/data-pa-panel="/g)||[]).length,4);
+assert.equal((edit.match(/data-pa-panel="/g)||[]).length,5);
+assert.match(edit,/data-pa-integration-save/,"integration tab saves Jira/Confluence/webhook settings");
+assert.match(edit,/name="paJiraUrl"/);
+assert.match(edit,/name="paConfluenceUrl"/);
+assert.match(edit,/name="paWebhookSecret"/);
 assert.match(edit,/name="id" value="agentflow" required readonly/);
 assert.match(edit,/修改 Key/);
 assert.match(edit,/标识用于接口与链接，创建后不可修改/);

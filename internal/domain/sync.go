@@ -10,12 +10,39 @@ import (
 // SyncConfig holds platform-level external sync settings. TAPD workspace/iteration
 // belong on each Project; legacy sync_config TAPD fields are migrated on startup.
 type SyncConfig struct {
-	PlaybookSeedRev     int       `json:"playbookSeedRev,omitempty"`
-	GongfengProjectID   string    `json:"gongfengProjectId"`
-	GongfengMCPURL      string    `json:"gongfengMcpUrl"`
-	TAPDWorkspaceID     string    `json:"tapdWorkspaceId"`
-	TAPDIterationID     string    `json:"tapdIterationId"`
-	TAPDMCPURL          string    `json:"tapdMcpUrl"`
+	PlaybookSeedRev   int    `json:"playbookSeedRev,omitempty"`
+	GongfengProjectID string `json:"gongfengProjectId"`
+	GongfengMCPURL    string `json:"gongfengMcpUrl"`
+	TAPDWorkspaceID   string `json:"tapdWorkspaceId"`
+	TAPDIterationID   string `json:"tapdIterationId"`
+	TAPDMCPURL        string `json:"tapdMcpUrl"`
+	// Jira read-only import (P1). Token is a Jira API token or PAT stored
+	// alongside the other sync credentials; per-project keys live on Project.
+	JiraBaseURL string `json:"jiraBaseUrl,omitempty"`
+	JiraEmail   string `json:"jiraEmail,omitempty"`
+	JiraToken   string `json:"jiraToken,omitempty"`
+	JiraJQL     string `json:"jiraJql,omitempty"`
+	// JiraWriteBackEnabled turns on the MR→Jira delivery write-back (P3):
+	// when a synced Jira work item's merge requests reach the default branch,
+	// the platform posts one delivery comment and moves the issue to a done
+	// transition. Off by default; read-only import stays the default posture.
+	JiraWriteBackEnabled bool `json:"jiraWriteBackEnabled,omitempty"`
+	// Inbound webhooks (P4). External systems POST to /api/webhooks/<source>
+	// and must echo WebhookSecret in X-Webhook-Secret (GitLab may use its
+	// native X-Gitlab-Token header). Write-only like the other credentials.
+	WebhookSecret           string `json:"webhookSecret,omitempty"`
+	WebhookSecretConfigured bool   `json:"webhookSecretConfigured,omitempty"`
+	// Confluence product-doc publishing (P2). Pages live under one platform
+	// space key unless a request overrides it; per-issue page refs live on
+	// Issue (ConfluencePageID/URL).
+	ConfluenceBaseURL         string `json:"confluenceBaseUrl,omitempty"`
+	ConfluenceEmail           string `json:"confluenceEmail,omitempty"`
+	ConfluenceToken           string `json:"confluenceToken,omitempty"`
+	ConfluenceSpaceKey        string `json:"confluenceSpaceKey,omitempty"`
+	ConfluenceTokenConfigured bool   `json:"confluenceTokenConfigured,omitempty"`
+	// JiraTokenConfigured reports a stored token on API responses; JiraToken
+	// itself is cleared by PublicSyncConfig before responding.
+	JiraTokenConfigured bool      `json:"jiraTokenConfigured,omitempty"`
 	AutoSyncEnabled     bool      `json:"autoSyncEnabled"`
 	AutoSyncIntervalSec int       `json:"autoSyncIntervalSec"`
 	LastSyncAt          time.Time `json:"lastSyncAt"`
@@ -24,6 +51,18 @@ type SyncConfig struct {
 }
 
 const DefaultIntegrateBranch = "agentflow/integration"
+
+// PublicSyncConfig strips the Jira/Confluence API tokens from API responses
+// while reporting whether one is stored.
+func PublicSyncConfig(cfg SyncConfig) SyncConfig {
+	cfg.JiraTokenConfigured = strings.TrimSpace(cfg.JiraToken) != ""
+	cfg.JiraToken = ""
+	cfg.ConfluenceTokenConfigured = strings.TrimSpace(cfg.ConfluenceToken) != ""
+	cfg.ConfluenceToken = ""
+	cfg.WebhookSecretConfigured = strings.TrimSpace(cfg.WebhookSecret) != ""
+	cfg.WebhookSecret = ""
+	return cfg
+}
 
 // NormalizeIntegrateBranch trims the configured integrate branch. Empty means
 // the repository does not use an integration baseline: scheduled SOPs skip
@@ -69,7 +108,8 @@ type ScheduleJob struct {
 	Enabled              bool                  `json:"enabled"`
 	ProjectID            string                `json:"projectId"`
 	// Source limits which issues a trigger job starts.
-	// Empty means 工蜂 and TAPD (and platform-local issues). "gongfeng" or "tapd" starts only that source.
+	// Empty means all configured sources (and platform-local issues).
+	// "gongfeng" / "tapd" / "github" / "gitlab" / "jira" starts only that source.
 	Source           string `json:"source,omitempty"`
 	TAPDWorkspaceID  string `json:"tapdWorkspaceId,omitempty"`
 	TAPDIterationID  string `json:"tapdIterationId,omitempty"`
@@ -168,10 +208,10 @@ func NormalizeScheduleSource(raw string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "", "all", "both":
 		return "", nil
-	case "github", "gongfeng", "tapd":
+	case "github", "gongfeng", "tapd", "gitlab", "jira":
 		return strings.ToLower(strings.TrimSpace(raw)), nil
 	default:
-		return "", fmt.Errorf("来源只能是工蜂、TAPD，或两边都同步")
+		return "", fmt.Errorf("来源只能是 GitHub、工蜂、GitLab、Jira、TAPD，或全部同步")
 	}
 }
 
@@ -198,7 +238,7 @@ func (j ScheduleJob) MatchesIssueStatus(status string) bool {
 type SyncLog struct {
 	ID        string `json:"id"`
 	Direction string `json:"direction"` // pull, push
-	Source    string `json:"source"`    // gongfeng, tapd
+	Source    string `json:"source"`    // gongfeng, tapd, github, gitlab, jira
 	Action    string `json:"action"`    // sync_issues, sync_stories, create_issue, create_story
 	Status    string `json:"status"`    // success, failed
 	Count     int    `json:"count"`

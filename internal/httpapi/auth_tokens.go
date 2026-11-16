@@ -67,6 +67,11 @@ func protectedAccessPath(path string) bool {
 	if path == insightIngestPath {
 		return false
 	}
+	// Inbound webhooks authenticate with the platform webhook secret instead
+	// of an interactive login (webhooks.go).
+	if strings.HasPrefix(path, "/api/webhooks/") {
+		return false
+	}
 	if path == "/mcp" {
 		return true
 	}

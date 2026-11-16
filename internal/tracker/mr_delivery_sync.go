@@ -124,6 +124,14 @@ func (s *Service) syncMRDeliveryStates(store MRDeliveryStore) {
 			}
 			continue
 		}
+		if strings.HasPrefix(row.MRProject, "gitlab:") {
+			if err := s.refreshGitLabDelivery(store, row.MRProject, row.MRIID); err != nil {
+				log.Printf("GitLab delivery refresh: %v", err)
+			} else {
+				updated++
+			}
+			continue
+		}
 		client, _, clientErr := s.gongfengClientForRemoteProject(row.MRProject)
 		if clientErr != nil {
 			log.Printf("mr-delivery auth %s: %v", row.MRProject, clientErr)
@@ -145,6 +153,14 @@ func (s *Service) syncMRDeliveryStates(store MRDeliveryStore) {
 	if updated > 0 {
 		log.Printf("mr-delivery sync: refreshed %d/%d MR states", updated, len(pending))
 	}
+	// Jira delivery write-back (P3): announce newly merged MRs on their source
+	// Jira issues when the store also carries work items. No-op unless the
+	// Jira write-back switch is on and the store implements IssueStoreAdapter.
+	if iss, ok := store.(IssueStoreAdapter); ok {
+		if n := s.WriteBackJiraDeliveries(iss); n > 0 {
+			log.Printf("jira write-back: %d work items updated", n)
+		}
+	}
 }
 
 func (s *Service) discoverPromoteMRs(store MRDeliveryStore) {
@@ -154,7 +170,9 @@ func (s *Service) discoverPromoteMRs(store MRDeliveryStore) {
 	now := time.Now().UTC()
 	for _, repo := range store.Repositories() {
 		project := strings.TrimSpace(repo.GongfengProjectID)
-		if strings.HasPrefix(project, "github:") {
+		if strings.HasPrefix(project, "github:") || strings.HasPrefix(project, "gitlab:") {
+			// github/gitlab repositories run through the REST clients, not the
+			// Gongfeng MCP promote discovery.
 			continue
 		}
 		def := strings.TrimSpace(repo.DefaultBranch)
@@ -217,7 +235,7 @@ func (s *Service) syncWorkCommitsOnDefaultBranch(store MRDeliveryStore) {
 	}
 	for _, repo := range store.Repositories() {
 		project := strings.TrimSpace(repo.GongfengProjectID)
-		if strings.HasPrefix(project, "github:") {
+		if strings.HasPrefix(project, "github:") || strings.HasPrefix(project, "gitlab:") {
 			continue
 		}
 		def := strings.TrimSpace(repo.DefaultBranch)

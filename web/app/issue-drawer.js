@@ -189,6 +189,7 @@ function renderIssueDetailTab(){
   host.querySelectorAll('[data-sop-assignee] input[type="hidden"]').forEach(input=>input.onchange=()=>setIssueSOPOwner(issue.id, input.closest('[data-sop-assignee]').dataset.sopAssignee, Number(input.value)||0));
   host.querySelectorAll('[data-push-tapd]').forEach(b=>b.onclick=()=>pushIssueToTAPDFromDetail(b.dataset.pushTapd));
   host.querySelectorAll('[data-resync-tapd]').forEach(b=>b.onclick=()=>resyncTAPDIssueById(b.dataset.resyncTapd));
+  host.querySelectorAll('[data-publish-confluence]').forEach(b=>b.onclick=()=>publishConfluenceById(b.dataset.publishConfluence));
   host.querySelectorAll('[data-reopen-issue]').forEach(b=>b.onclick=()=>reopenDeliveredIssue(b.dataset.reopenIssue));
   host.querySelectorAll('[data-delete-issue]').forEach(b=>b.onclick=()=>deleteIssueById(b.dataset.deleteIssue||issue.id));
   bindIssueDeletionContext(host);
@@ -475,6 +476,23 @@ async function closeIssueById(issueId){
     toast(err.message,'err');
   }
 }
+async function publishConfluenceById(issueId){
+  const issue=(state.data.issues||[]).find(i=>i.id===issueId)||state.issueDetailData?.issue;
+  if(!issue)return toast('未找到需求单');
+  const cfg=state.data.syncConfig||{};
+  if(!cfg.confluenceBaseUrl||!cfg.confluenceTokenConfigured)return toast('请先在同步设置中配置 Confluence 地址与 API Token');
+  try{
+    const updated=await api(`/api/issues/${encodeURIComponent(issueId)}/publish-confluence`,{method:'POST',body:'{}'});
+    const idx=(state.data.issues||[]).findIndex(i=>i.id===issueId);
+    if(idx>=0)state.data.issues[idx]=updated;
+    if(state.issueDetailData?.issue?.id===issueId){
+      state.issueDetailData.issue=updated;
+      renderIssueDetailTab();
+    }
+    renderIssues();
+    toast(updated.confluencePageUrl?'方案已发布到 Confluence':'方案已发布','ok');
+  }catch(e){toast(e.message,'err')}
+}
 async function resyncTAPDIssueById(issueId){
   const issue=(state.data.issues||[]).find(i=>i.id===issueId)||state.issueDetailData?.issue;
   if(!issue)return toast('未找到需求单');
@@ -758,8 +776,14 @@ function conversationDeliveryHTML(issue,data){
 }
 // 对话需求的代码交付：与执行进展同一套仓库卡片，交付方式指向会话，不链到没有节点的工作区运行。
 function deliveryPane(issue,data){
-  if(!conversationWorkspaceIssue(issue,data.run))return sopDeliveryPane(issue,data);
-  return `<div class="detail-section"><h3>代码仓库与分支<span class="sub">对话工作区检出的仓库</span></h3>${conversationRepoCards(issue,data)}</div><div class="detail-section"><h3>交付方式<span class="sub">在对话工作区里直接改代码，没有 SOP 运行</span></h3><div class="issue-outcome-actions">${conversationSessionButton(issue,data)||'<span class="muted">没有关联的会话</span>'}</div></div>`;
+  const planSection=confluencePlanSection(issue);
+  if(!conversationWorkspaceIssue(issue,data.run))return planSection+sopDeliveryPane(issue,data);
+  return planSection+`<div class="detail-section"><h3>代码仓库与分支<span class="sub">对话工作区检出的仓库</span></h3>${conversationRepoCards(issue,data)}</div><div class="detail-section"><h3>交付方式<span class="sub">在对话工作区里直接改代码，没有 SOP 运行</span></h3><div class="issue-outcome-actions">${conversationSessionButton(issue,data)||'<span class="muted">没有关联的会话</span>'}</div></div>`;
+}
+// 产品方案发布到 Confluence：正文取需求空间的 doc 产物，没有则用需求描述。
+function confluencePlanSection(issue){
+  const link=issue.confluencePageUrl?`<span class="muted">已发布：</span><a href="${escapeHTML(safeURL(issue.confluencePageUrl))}" target="_blank" rel="noopener noreferrer" class="ext-link">查看方案页 ↗</a>`:'';
+  return `<div class="detail-section"><h3>产品方案<span class="sub">把需求空间的方案文档发布到 Confluence，评审留痕</span></h3><div class="issue-outcome-actions"><button class="button ghost small" data-publish-confluence="${escapeHTML(issue.id)}">${issue.confluencePageId?'更新 Confluence 页面':'发布方案到 Confluence'}</button>${link}</div></div>`;
 }
 function sopPane(issue,data){
   if(conversationWorkspaceIssue(issue,data.run))return conversationDeliveryHTML(issue,data);

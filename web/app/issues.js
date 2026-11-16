@@ -544,7 +544,7 @@ function issueFromForm(){
 // 就能完成仓库配置。
 // repoDisplayPath shows host/path for a parsed repository, e.g. github.com/owner/name.
 function repoDisplayPath(info,fallback=''){return info?.provider==='ssh'?(info.project||info.cloneUrl||fallback):info?.webUrl?String(info.webUrl).replace(/^https?:\/\//,''):String(fallback||'')}
-function repoProviderLabel(info){return info?.provider==='ssh'?'Git SSH':info?.provider==='github'?'GitHub':'工蜂'}
+function repoProviderLabel(info){return info?.provider==='ssh'?'Git SSH':info?.provider==='github'?'GitHub':info?.provider==='gitlab'?'GitLab':'工蜂'}
 function parseGongfengRepoURL(raw){
   const sshInfo=globalThis.LoopForgeGitSSH?.(raw);if(sshInfo)return sshInfo;
   let publicURL=String(raw||'').trim().replace(/^git clone /,'').replace(/^github:/,'https://github.com/').replace(/^(?:git@github\.com:|ssh:\/\/git@github\.com(?::22)?\/)/,'https://github.com/');
@@ -563,12 +563,18 @@ function parseGongfengRepoURL(raw){
   let rest=s;
   if(hadScheme)rest=rest.slice(rest.indexOf('://')+3);
   if(rest.includes('@'))rest=rest.slice(rest.lastIndexOf('@')+1);
-  let path='';
+  let host='git.example.com',path='';
   if(!hadScheme&&!hadAt&&!rest.includes(':')){
     path=rest;
   }else if(rest.includes('/')){
-    const cut=rest.search(/[:\/]/),host=rest.slice(0,cut);
-    if(host.toLowerCase()!=='git.example.com')return null;
+    const cut=rest.search(/[:\/]/);host=rest.slice(0,cut).toLowerCase();
+    // Any host is accepted: the built-in Gongfeng host keeps its historic
+    // project-id shape, every other host is a self-hosted GitLab instance
+    // stored as gitlab:<host>/<path> (the shape the GitLab client reads).
+    // Public hosts that are not GitLab are rejected so a typo does not
+    // silently create a broken repository binding.
+    if(!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/.test(host))return null;
+    if(/^(?:www\.)?(?:bitbucket\.org|gitee\.com|codeberg\.org|sourceforge\.net|launchpad\.net|git\.sr\.ht|gitea\.com|dev\.azure\.com|visualstudio\.com|gitlab\.com)$/i.test(host)&&host!=='gitlab.com')return null;
     path=rest.slice(cut+1);
     if(rest[cut]===':'){const j=path.indexOf('/');if(j>=0&&/^\d+$/.test(path.slice(0,j)))path=path.slice(j+1)}
   }else return null;
@@ -579,7 +585,15 @@ function parseGongfengRepoURL(raw){
   path=path.replace(/^\/+|\/+$/g,'');
   if(!path||path.includes('..')||path.split('/').some(seg=>!seg||/[\s\\?#]/.test(seg)))return null;
   const name=path.slice(path.lastIndexOf('/')+1);
-  return {project:path,name,webUrl:`https://git.example.com/${path}`,cloneUrl:ssh?`git@git.example.com:${path}.git`:`https://git.example.com/${path}.git`};
+  const gongfeng=host==='git.example.com';
+  const cloneHost=host;
+  return {
+    project:gongfeng?path:`gitlab:${host}/${path}`,
+    name,
+    webUrl:`https://${host}/${path}`,
+    cloneUrl:ssh?`git@${cloneHost}:${path}.git`:`https://${host}/${path}.git`,
+    ...(gongfeng?{}:{provider:'gitlab'})
+  };
 }
 // fillRepositoryFromLink 把解析结果填进空缺字段；显式填过的字段不覆盖。
 function fillRepositoryFromLink(url,fill){

@@ -1,0 +1,16 @@
+-- Idempotent MySQL migration: P1 "GitLab generalization + read-only Jira
+-- import" (gitlab provider repositories, Jira sync fields).
+--
+-- No DDL is required. The new fields live inside existing JSON payloads and
+-- are read with zero-value defaults by code, so old rows keep working:
+--
+--   repositories.payload  -> "provider": "gitlab" with
+--                            "gongfengProjectId": "gitlab:<host>/<path>"
+--                            (Web/clone URLs are derived on save)
+--   projects.payload      -> "jiraProjectKey" (per-project Jira binding)
+--   sync_config.payload   -> "jiraBaseUrl" / "jiraEmail" / "jiraToken" /
+--                            "jiraJql" (platform-wide Jira connection)
+--
+-- No seed data is inserted; teams configure Jira and GitLab repositories
+-- through the UI. scripts/install-schema-extensions.sh runs this script on
+-- install and on ./start.sh pull.
