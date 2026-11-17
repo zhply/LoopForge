@@ -4,15 +4,20 @@
 # TARGETARCH. Only the final stage runs as the target (emulated for arm64 on an
 # amd64 builder), which keeps multi-platform releases fast.
 FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS chatbot
+# Regional mirrors for builders behind firewalls; both stay on upstream when
+# the build args are empty (set LOOPFORGE_* in .env, see compose.dev.yaml).
+ARG LOOPFORGE_NPM_REGISTRY=
 WORKDIR /src
 COPY chatbot/package.json chatbot/package-lock.json chatbot/
-RUN --mount=type=cache,target=/root/.npm npm --prefix chatbot ci --include=dev --no-audit --no-fund
+RUN --mount=type=cache,target=/root/.npm sh -c '[ -z "$LOOPFORGE_NPM_REGISTRY" ] || npm config set registry "$LOOPFORGE_NPM_REGISTRY"; npm --prefix chatbot ci --include=dev --no-audit --no-fund'
 COPY chatbot/ chatbot/
 COPY web/app/ web/app/
 RUN npm --prefix chatbot run build && test -f web/native-chat/index.html
 FROM --platform=$BUILDPLATFORM golang:1.26.11-bookworm AS build
 ARG TARGETOS
 ARG TARGETARCH
+ARG LOOPFORGE_GOPROXY=
+ENV GOPROXY=${LOOPFORGE_GOPROXY:-https://proxy.golang.org,direct}
 WORKDIR /src
 # Empty lets build-binaries.sh size parallelism from the builder's CPUs and memory.
 ARG LOOPFORGE_BUILD_JOBS=

@@ -9,5 +9,7 @@ services:
       args:
         LOOPFORGE_BUILD_JOBS: ${LOOPFORGE_BUILD_JOBS:-}
         LOOPFORGE_COMMIT: ${LOOPFORGE_COMMIT:-}
+        LOOPFORGE_GOPROXY: ${LOOPFORGE_GOPROXY:-}
+        LOOPFORGE_NPM_REGISTRY: ${LOOPFORGE_NPM_REGISTRY:-}
     environment:
       AGENTFLOW_ISOLATED_IMAGE: loopforge-platform:local
